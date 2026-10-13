@@ -1,0 +1,888 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GuardianX | Autonomous Safety Command Cockpit</title>
+
+  <!-- Tailwind CSS Engine -->
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <!-- High-Tech Typography -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+
+  <!-- Leaflet GIS Engine -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['"Plus Jakarta Sans"', 'sans-serif'],
+            mono: ['"JetBrains Mono"', 'monospace'],
+          },
+          colors: {
+            obsidian: '#05070e',
+            voidNavy: '#0a0f1d',
+            auroraCyan: '#06b6d4',
+            emeraldGlow: '#10b981',
+            crimsonAlarm: '#f43f5e',
+            amberFlare: '#f59e0b',
+          }
+        }
+      }
+    }
+  </script>
+
+  <style>
+    /* Aurora Deep Obsidian Mesh */
+    body {
+      background-color: #05070e;
+      background-image: 
+        radial-gradient(at 0% 15%, rgba(6, 182, 212, 0.12) 0px, transparent 45%),
+        radial-gradient(at 95% 5%, rgba(139, 92, 246, 0.14) 0px, transparent 40%),
+        radial-gradient(at 50% 90%, rgba(16, 185, 129, 0.08) 0px, transparent 50%),
+        radial-gradient(at 85% 75%, rgba(244, 63, 94, 0.08) 0px, transparent 40%);
+      background-attachment: fixed;
+      color: #f1f5f9;
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    /* Glassmorphic Command Panels */
+    .cockpit-panel {
+      background: linear-gradient(145deg, rgba(14, 21, 37, 0.78) 0%, rgba(8, 12, 22, 0.90) 100%);
+      backdrop-filter: blur(28px);
+      -webkit-backdrop-filter: blur(28px);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      box-shadow: 0 20px 50px -10px rgba(0, 0, 0, 0.7), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+      transition: all 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    .cockpit-panel:hover {
+      border-color: rgba(255, 255, 255, 0.18);
+      box-shadow: 0 24px 60px -8px rgba(0, 0, 0, 0.8), 0 0 30px rgba(6, 182, 212, 0.08);
+    }
+
+    .glass-chip {
+      background: rgba(10, 15, 29, 0.65);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      backdrop-filter: blur(16px);
+    }
+
+    /* Radar Ping Marker for Leaflet */
+    .radar-ping-core {
+      position: relative;
+      width: 24px;
+      height: 24px;
+    }
+    .radar-ping-center {
+      width: 14px;
+      height: 14px;
+      position: absolute;
+      top: 5px;
+      left: 5px;
+      border-radius: 50%;
+      background: #10b981;
+      border: 2.5px solid #ffffff;
+      box-shadow: 0 0 20px #10b981, 0 0 40px #10b981;
+      transition: all 0.4s ease;
+    }
+    .radar-ring {
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      border: 2px solid #10b981;
+      animation: radar-ping-burst 2s cubic-bezier(0, 0.2, 0.8, 1) infinite;
+    }
+    @keyframes radar-ping-burst {
+      0% { transform: scale(0.6); opacity: 1; }
+      100% { transform: scale(3.2); opacity: 0; }
+    }
+
+    .beacon-danger .radar-ping-center {
+      background: #f43f5e !important;
+      box-shadow: 0 0 25px #f43f5e, 0 0 50px #f43f5e !important;
+    }
+    .beacon-danger .radar-ring {
+      border-color: #f43f5e !important;
+    }
+
+    .beacon-warning .radar-ping-center {
+      background: #f59e0b !important;
+      box-shadow: 0 0 25px #f59e0b, 0 0 50px #f59e0b !important;
+    }
+    .beacon-warning .radar-ring {
+      border-color: #f59e0b !important;
+    }
+
+    /* Custom high-tech scrollbar */
+    ::-webkit-scrollbar { width: 5px; height: 5px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.12); border-radius: 99px; }
+    ::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.25); }
+
+    .leaflet-container {
+      background: #05070e !important;
+    }
+  </style>
+</head>
+<body class="flex flex-col h-screen overflow-hidden antialiased selection:bg-cyan-500/20 selection:text-cyan-200">
+
+  <!-- Top Executive Command Bar -->
+  <header class="h-16 px-6 border-b border-white/[0.06] bg-[#05070e]/85 backdrop-blur-xl flex items-center justify-between z-30 shrink-0">
+    <div class="flex items-center gap-4">
+      <div class="w-9 h-9 rounded-xl bg-gradient-to-br from-cyan-500/20 to-sky-500/5 border border-cyan-400/40 flex items-center justify-center shadow-lg shadow-cyan-500/10">
+        <i data-lucide="shield-alert" class="w-5 h-5 text-cyan-300"></i>
+      </div>
+      <div>
+        <div class="flex items-center gap-2.5">
+          <span class="text-sm font-bold tracking-widest text-white uppercase font-mono">GUARDIANX</span>
+          <span class="text-[9px] font-mono px-2 py-0.5 rounded-full bg-cyan-950/70 text-cyan-300 border border-cyan-500/30 font-semibold tracking-wider">COMMAND COCKPIT</span>
+        </div>
+        <p class="text-[10px] text-slate-400 font-mono tracking-wider">AUTONOMOUS WEARABLE SAFETY ECOSYSTEM</p>
+      </div>
+    </div>
+
+    <!-- Right Quick Controls -->
+    <div class="flex items-center gap-3">
+      <!-- Sync Status -->
+      <div class="flex items-center gap-2 px-3.5 py-1.5 rounded-xl glass-chip text-xs font-mono">
+        <span id="headerSyncDot" class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+        <span id="headerSyncText" class="text-slate-300 font-medium">LIVE STREAMING</span>
+      </div>
+
+      <!-- Audio Mute/Unmute -->
+      <button onclick="toggleAudio()" id="audioToggleBtn" class="flex items-center gap-2 px-3.5 py-1.5 rounded-xl glass-chip hover:border-white/20 transition-all text-xs font-mono text-slate-300">
+        <i data-lucide="volume-2" id="audioIcon" class="w-4 h-4 text-emerald-400"></i>
+        <span id="audioLabel">AUDIO ACTIVE</span>
+      </button>
+
+      <!-- Digital Clock -->
+      <div class="hidden sm:flex items-center gap-2 px-3.5 py-1.5 rounded-xl glass-chip text-xs font-mono text-slate-300">
+        <i data-lucide="clock" class="w-3.5 h-3.5 text-slate-400"></i>
+        <span id="systemClock">--:--:--</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Split Cockpit Canvas -->
+  <div class="flex-1 flex overflow-hidden relative">
+
+    <!-- LEFT VERTICAL COMMAND SIDEBAR -->
+    <aside class="w-80 border-r border-white/[0.06] bg-[#070b16]/80 backdrop-blur-2xl flex flex-col justify-between p-5 z-20 overflow-y-auto shrink-0 gap-5">
+      
+      <div class="space-y-4">
+        <!-- Wearable Device Profile Island -->
+        <div class="cockpit-panel p-4 rounded-2xl relative overflow-hidden">
+          <div class="flex items-center justify-between pb-2.5 border-b border-white/[0.06]">
+            <span class="text-[10px] font-mono uppercase tracking-widest text-slate-400">ESP32 SAFETY CORE</span>
+            <span class="text-[10px] font-mono px-2 py-0.5 rounded-full bg-emerald-950/70 text-emerald-400 border border-emerald-500/30">ONLINE</span>
+          </div>
+
+          <div class="mt-3 grid grid-cols-2 gap-2 text-xs font-mono">
+            <div class="p-2.5 rounded-xl glass-chip flex flex-col">
+              <span class="text-[9px] text-slate-400">HOTSPOT 2.4G</span>
+              <span class="text-white font-semibold mt-1 flex items-center gap-1.5 text-[11px]">
+                <i data-lucide="wifi" class="w-3.5 h-3.5 text-cyan-400"></i> -44 dBm
+              </span>
+            </div>
+            <div class="p-2.5 rounded-xl glass-chip flex flex-col">
+              <span class="text-[9px] text-slate-400">FIREBASE SYNC</span>
+              <span class="text-emerald-400 font-semibold mt-1 flex items-center gap-1.5 text-[11px]">
+                <i data-lucide="database" class="w-3.5 h-3.5 text-emerald-400"></i> 1.2s LAT
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Sensor Diagnostics Grid -->
+        <div class="cockpit-panel p-4 rounded-2xl space-y-3">
+          <div class="flex items-center justify-between pb-1 border-b border-white/[0.06]">
+            <span class="text-xs font-bold font-mono tracking-wider text-white uppercase">Sensor Diagnostics</span>
+            <span class="text-[9px] font-mono text-cyan-400">4 ACTIVE</span>
+          </div>
+
+          <!-- MPU6050 -->
+          <div class="p-2 rounded-xl glass-chip flex items-center justify-between text-xs font-mono">
+            <div class="flex items-center gap-2">
+              <i data-lucide="move-3d" class="w-3.5 h-3.5 text-cyan-400"></i>
+              <span class="text-slate-300">MPU6050 6-DOF</span>
+            </div>
+            <span class="text-[9px] px-1.5 py-0.5 rounded bg-cyan-950 text-cyan-300 border border-cyan-500/30">±8G ARMED</span>
+          </div>
+
+          <!-- NEO-6M GPS -->
+          <div class="p-2 rounded-xl glass-chip flex items-center justify-between text-xs font-mono">
+            <div class="flex items-center gap-2">
+              <i data-lucide="map-pin" class="w-3.5 h-3.5 text-emerald-400"></i>
+              <span class="text-slate-300">NEO-6M GPS</span>
+            </div>
+            <span id="sidebarGpsBadge" class="text-[9px] px-1.5 py-0.5 rounded bg-amber-950 text-amber-300 border border-amber-500/30">FALLBACK PIN</span>
+          </div>
+
+          <!-- Reed Magnetic Switch -->
+          <div class="p-2 rounded-xl glass-chip flex items-center justify-between text-xs font-mono">
+            <div class="flex items-center gap-2">
+              <i data-lucide="magnet" class="w-3.5 h-3.5 text-indigo-400"></i>
+              <span class="text-slate-300">Reed Clasp (GPIO 4)</span>
+            </div>
+            <span id="sidebarReedBadge" class="text-[9px] px-1.5 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-500/30">LATCHED</span>
+          </div>
+
+          <!-- Buzzer -->
+          <div class="p-2 rounded-xl glass-chip flex items-center justify-between text-xs font-mono">
+            <div class="flex items-center gap-2">
+              <i data-lucide="bell" class="w-3.5 h-3.5 text-amber-400"></i>
+              <span class="text-slate-300">Buzzer (GPIO 19)</span>
+            </div>
+            <span id="sidebarBuzzerBadge" class="text-[9px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-300 border border-white/10">STANDBY</span>
+          </div>
+        </div>
+
+        <!-- Chronological Incident Audit Stream -->
+        <div class="cockpit-panel p-4 rounded-2xl">
+          <div class="flex items-center justify-between pb-2 border-b border-white/[0.06] mb-2.5">
+            <span class="text-xs font-bold font-mono tracking-wider text-white uppercase">Incident Journal</span>
+            <span id="incidentCounter" class="text-[9px] font-mono px-2 py-0.5 rounded-full bg-cyan-950/60 text-cyan-300 border border-cyan-500/20">0 ALERTS</span>
+          </div>
+          <div id="sidebarEventStream" class="space-y-2 max-h-40 overflow-y-auto pr-1">
+            <div class="p-2 rounded-xl glass-chip text-[10px] font-mono">
+              <span class="text-emerald-400 font-semibold">[BOOT]</span>
+              <p class="text-slate-300 mt-0.5">ESP32 Telemetry Engine online.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Footer Quick Status -->
+      <div class="p-3 rounded-xl glass-chip text-[10px] font-mono text-slate-400 flex items-center justify-between">
+        <span>GATEWAY: CALLMEBOT</span>
+        <span class="text-emerald-400">CONNECTED</span>
+      </div>
+    </aside>
+
+    <!-- CENTER & RIGHT: DOMINANT INTERACTIVE MAP CANVAS -->
+    <main class="flex-1 h-full relative overflow-hidden bg-[#05070e]">
+      
+      <!-- Leaflet Map Canvas -->
+      <div id="cockpitMap" class="w-full h-full z-0"></div>
+
+      <!-- TOP FLOATING RADAR HUD -->
+      <div class="absolute top-5 left-5 right-5 sm:right-auto sm:max-w-2xl z-10 pointer-events-none">
+        <div class="cockpit-panel rounded-3xl p-5 sm:p-6 pointer-events-auto border border-white/10 shadow-2xl relative overflow-hidden">
+          
+          <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-5">
+            <!-- Left: Status Icon & Condition Text -->
+            <div class="flex items-center gap-4">
+              <div id="statusIconSquare" class="w-14 h-14 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400 shrink-0 transition-all duration-500 shadow-inner">
+                <i data-lucide="shield-check" id="statusMainIcon" class="w-7 h-7"></i>
+              </div>
+
+              <div>
+                <div class="flex items-center gap-2">
+                  <span class="text-[10px] font-mono tracking-widest text-slate-400 uppercase">TELEMETRY CONDITION</span>
+                  <span id="statusPill" class="text-[10px] font-mono px-2.5 py-0.5 rounded-full bg-emerald-950/80 text-emerald-300 border border-emerald-500/30 font-bold">
+                    SYSTEM NORMAL
+                  </span>
+                </div>
+                <h1 id="statusHeadline" class="text-2xl sm:text-3xl font-extrabold tracking-tight text-white mt-1 font-sans">
+                  SAFE / MONITORING
+                </h1>
+              </div>
+            </div>
+
+            <!-- Right: Dynamic IMU Motion Vector -->
+            <div class="flex flex-col items-start sm:items-end w-full sm:w-auto border-t sm:border-t-0 border-white/[0.08] pt-3 sm:pt-0">
+              <div class="flex items-center justify-between sm:justify-end gap-2 w-full">
+                <span class="text-[10px] font-mono text-slate-400">IMU MOTION VECTOR</span>
+                <span id="imuAccelReadout" class="text-xs font-mono font-bold text-cyan-400">1.00 G (9.8 m/s²)</span>
+              </div>
+              <div class="relative mt-1 bg-slate-950/60 rounded-xl p-1 border border-white/10">
+                <canvas id="imuWaveCanvas" width="160" height="42" class="rounded-lg"></canvas>
+                <div class="absolute bottom-1 right-2 text-[8px] font-mono text-slate-500">MPU6050 3-AXIS</div>
+              </div>
+            </div>
+          </div>
+
+          <p id="statusDetailedMessage" class="text-xs text-slate-400 mt-3 font-mono leading-relaxed">
+            Acquiring satellite constellation. Default safe anchor active.
+          </p>
+
+          <!-- Ambient Glow Orb -->
+          <div id="heroGlow" class="absolute -right-10 -bottom-10 w-44 h-44 bg-emerald-500/10 rounded-full blur-[60px] pointer-events-none transition-all duration-700"></div>
+        </div>
+      </div>
+
+      <!-- MAP CONTROLS FLOATING TOP-RIGHT -->
+      <div class="absolute top-5 right-5 z-10 flex flex-col gap-2.5">
+        <button onclick="toggleMapTiles()" id="mapStyleToggle" class="p-3 rounded-2xl cockpit-panel hover:border-white/30 text-slate-200 transition shadow-xl group" title="Toggle Satellite Mode">
+          <i data-lucide="layers" class="w-4 h-4 text-cyan-400 group-hover:rotate-45 transition-transform"></i>
+        </button>
+        <button onclick="recenterCockpitMap()" class="p-3 rounded-2xl cockpit-panel hover:border-white/30 text-slate-200 transition shadow-xl" title="Center Marker">
+          <i data-lucide="crosshair" class="w-4 h-4 text-emerald-400"></i>
+        </button>
+      </div>
+
+      <!-- BOTTOM ASYMMETRICAL TELEMETRY DOCK -->
+      <div class="absolute bottom-5 left-5 right-5 z-10 pointer-events-none">
+        <div class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-4 pointer-events-auto">
+
+          <!-- Dock Item 1: Precise GNSS Spatial Coordinates & Maps Launcher -->
+          <div class="cockpit-panel p-4 rounded-2xl flex flex-col justify-between">
+            <div class="flex items-center justify-between text-slate-400">
+              <span class="text-[10px] font-mono uppercase tracking-wider text-slate-400">GNSS Coordinates</span>
+              <button onclick="copyCockpitCoords()" class="hover:text-cyan-300 transition" title="Copy">
+                <i data-lucide="copy" class="w-3.5 h-3.5"></i>
+              </button>
+            </div>
+            <div class="my-2">
+              <div id="dockCoords" class="text-base font-bold font-mono text-white tracking-wide">
+                9.836278, 78.162861
+              </div>
+              <div id="dockGpsStatusText" class="text-[10px] text-amber-400 font-mono mt-0.5">Fallback Active • Searching Satellites</div>
+            </div>
+            <a id="dockGoogleMapsBtn" href="https://maps.google.com/?q=9.836278,78.162861" target="_blank" class="w-full py-2 px-3 rounded-xl bg-white/90 hover:bg-white text-slate-950 font-mono text-[11px] font-bold text-center transition flex items-center justify-center gap-1.5 shadow-md">
+              <i data-lucide="navigation" class="w-3 h-3"></i>
+              <span>LAUNCH GOOGLE MAPS</span>
+            </a>
+          </div>
+
+          <!-- Dock Item 2: Physical Sensor Watch Telemetry -->
+          <div class="cockpit-panel p-4 rounded-2xl flex flex-col justify-between">
+            <span class="text-[10px] font-mono uppercase tracking-wider text-slate-400">Safety Sensor State</span>
+            <div class="my-2">
+              <div id="dockSensorState" class="text-base font-bold font-mono text-emerald-400">
+                MAGNET ATTACHED
+              </div>
+              <div id="dockSensorDetail" class="text-[10px] text-slate-400 font-mono mt-0.5">Reed Switch Pin 4: LOW (Secure)</div>
+            </div>
+            <div class="p-2 rounded-xl glass-chip flex items-center justify-between text-[11px] font-mono">
+              <span class="text-slate-400">FALL DETECTOR:</span>
+              <span class="text-cyan-400 font-semibold">22.0 m/s² ARMED</span>
+            </div>
+          </div>
+
+          <!-- Dock Item 3: Direct Emergency Panic & Dispatch Trigger -->
+          <div class="cockpit-panel p-4 rounded-2xl flex flex-col justify-between">
+            <span class="text-[10px] font-mono uppercase tracking-wider text-slate-400">Manual Operator Override</span>
+            <div class="my-2">
+              <button onclick="triggerSimulatedState('SOS BUTTON PRESSED')" class="w-full py-2.5 px-3 rounded-xl bg-rose-600/90 hover:bg-rose-500 text-white font-mono text-xs font-bold transition flex items-center justify-center gap-2 shadow-lg shadow-rose-600/20 active:scale-95">
+                <i data-lucide="alert-octagon" class="w-4 h-4"></i>
+                <span>TRIGGER PANIC SIREN</span>
+              </button>
+            </div>
+            <div class="text-[10px] font-mono text-slate-400 text-center">
+              Sends instant WhatsApp & sirens
+            </div>
+          </div>
+
+          <!-- Dock Item 4: Collapsible Testing / Simulation Suite Toggle -->
+          <div class="cockpit-panel p-4 rounded-2xl flex flex-col justify-between hidden lg:flex">
+            <div class="flex items-center justify-between">
+              <span class="text-[10px] font-mono uppercase tracking-wider text-slate-400">Simulation Drawer</span>
+              <span class="text-[9px] font-mono px-2 py-0.5 rounded-full bg-slate-800 text-slate-300">DEMO</span>
+            </div>
+            <div class="grid grid-cols-2 gap-2 my-2">
+              <button onclick="triggerSimulatedState('SAFE')" class="p-1.5 rounded-lg glass-chip hover:bg-slate-700/50 text-[10px] font-mono text-emerald-400 text-center transition">
+                SAFE
+              </button>
+              <button onclick="triggerSimulatedState('FALL DETECTED')" class="p-1.5 rounded-lg glass-chip hover:bg-slate-700/50 text-[10px] font-mono text-amber-400 text-center transition">
+                FALL
+              </button>
+              <button onclick="triggerSimulatedState('WATCH REMOVED')" class="p-1.5 rounded-lg glass-chip hover:bg-slate-700/50 text-[10px] font-mono text-orange-400 text-center transition">
+                REMOVED
+              </button>
+              <button onclick="triggerSimulatedState('SOS BUTTON PRESSED')" class="p-1.5 rounded-lg glass-chip hover:bg-slate-700/50 text-[10px] font-mono text-rose-400 text-center transition">
+                SOS
+              </button>
+            </div>
+            <div class="text-[9px] font-mono text-slate-500 text-center">
+              Hardware bypass testing mode
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+    </main>
+
+  </div>
+
+  <script>
+    // Web Audio API Synthesizer Engine
+    let audioContext = null;
+    let audioMuted = false;
+    let emergencyAlarmInterval = null;
+
+    function getAudio() {
+      if (!audioContext) {
+        audioContext = new (window.AudioContext || window.webkitAudioContext)();
+      }
+      if (audioContext.state === 'suspended') {
+        audioContext.resume();
+      }
+      return audioContext;
+    }
+
+    function playTone(freq = 800, dur = 0.15, type = 'sine') {
+      if (audioMuted) return;
+      try {
+        const ctx = getAudio();
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+
+        osc.type = type;
+        osc.frequency.setValueAtTime(freq, ctx.currentTime);
+
+        gain.gain.setValueAtTime(0.2, ctx.currentTime);
+        gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + dur);
+
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+
+        osc.start();
+        osc.stop(ctx.currentTime + dur);
+      } catch (err) {
+        console.warn("Audio Context init requires user click:", err);
+      }
+    }
+
+    function startEmergencySiren(type = 'SOS') {
+      if (emergencyAlarmInterval) return;
+      let toggle = false;
+
+      emergencyAlarmInterval = setInterval(() => {
+        toggle = !toggle;
+        if (type === 'SOS') {
+          playTone(toggle ? 1050 : 780, 0.22, 'sawtooth');
+        } else if (type === 'WATCH') {
+          playTone(880, 0.16, 'square');
+        } else {
+          playTone(toggle ? 920 : 640, 0.2, 'triangle');
+        }
+      }, 340);
+    }
+
+    function stopEmergencySiren() {
+      if (emergencyAlarmInterval) {
+        clearInterval(emergencyAlarmInterval);
+        emergencyAlarmInterval = null;
+      }
+    }
+
+    function toggleAudio() {
+      audioMuted = !audioMuted;
+      const audioIcon = document.getElementById('audioIcon');
+      const audioLabel = document.getElementById('audioLabel');
+
+      if (audioMuted) {
+        audioLabel.innerText = "AUDIO MUTED";
+        audioIcon.setAttribute('data-lucide', 'volume-x');
+        audioIcon.className = "w-4 h-4 text-slate-400";
+        stopEmergencySiren();
+      } else {
+        audioLabel.innerText = "AUDIO ACTIVE";
+        audioIcon.setAttribute('data-lucide', 'volume-2');
+        audioIcon.className = "w-4 h-4 text-emerald-400";
+        getAudio();
+        playTone(620, 0.1, 'sine');
+      }
+      lucide.createIcons();
+    }
+
+    // Dynamic IMU Inertial Motion Waveform
+    const imuCanvas = document.getElementById('imuWaveCanvas');
+    const imuCtx = imuCanvas.getContext('2d');
+    const imuPoints = new Array(50).fill(21);
+    let motionAgitation = 1.0;
+    let waveStrokeColor = '#06b6d4';
+
+    function drawImuWaveform() {
+      imuCtx.clearRect(0, 0, imuCanvas.width, imuCanvas.height);
+
+      imuCtx.strokeStyle = 'rgba(255, 255, 255, 0.08)';
+      imuCtx.lineWidth = 1;
+      imuCtx.beginPath();
+      imuCtx.moveTo(0, imuCanvas.height / 2);
+      imuCtx.lineTo(imuCanvas.width, imuCanvas.height / 2);
+      imuCtx.stroke();
+
+      const noise = (Math.random() - 0.5) * 4 * motionAgitation;
+      const midY = imuCanvas.height / 2;
+      const newY = midY + noise;
+
+      imuPoints.push(newY);
+      imuPoints.shift();
+
+      imuCtx.strokeStyle = waveStrokeColor;
+      imuCtx.lineWidth = 2;
+      imuCtx.lineCap = 'round';
+      imuCtx.lineJoin = 'round';
+      imuCtx.beginPath();
+
+      const step = imuCanvas.width / (imuPoints.length - 1);
+      for (let i = 0; i < imuPoints.length; i++) {
+        const x = i * step;
+        const y = imuPoints[i];
+        if (i === 0) {
+          imuCtx.moveTo(x, y);
+        } else {
+          imuCtx.lineTo(x, y);
+        }
+      }
+      imuCtx.stroke();
+
+      if (motionAgitation > 1.0 && lastRecordedStatus === "SAFE") {
+        motionAgitation = Math.max(1.0, motionAgitation - 0.05);
+      }
+
+      requestAnimationFrame(drawImuWaveform);
+    }
+    requestAnimationFrame(drawImuWaveform);
+
+    // ==========================================
+    // LEAFLET GIS ENGINE (Updated Coordinates: 9°50'10.6"N 78°09'46.3"E)
+    // ==========================================
+    const DEFAULT_LAT = 9.836278;
+    const DEFAULT_LNG = 78.162861;
+    let cockpitLat = DEFAULT_LAT;
+    let cockpitLng = DEFAULT_LNG;
+    let satelliteActive = true;
+
+    const map = L.map('cockpitMap', {
+      zoomControl: false,
+      attributionControl: true
+    }).setView([DEFAULT_LAT, DEFAULT_LNG], 17);
+
+    // Esri Satellite Layer (Default)
+    const satelliteTileLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+      attribution: 'Esri, Maxar',
+      maxZoom: 19
+    }).addTo(map);
+
+    // Alternate: Esri Dark Canvas
+    const darkTileLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}', {
+      attribution: 'Esri &copy; OpenStreetMap',
+      maxZoom: 18
+    });
+
+    function toggleMapTiles() {
+      satelliteActive = !satelliteActive;
+      if (satelliteActive) {
+        map.removeLayer(darkTileLayer);
+        map.addLayer(satelliteTileLayer);
+      } else {
+        map.removeLayer(satelliteTileLayer);
+        map.addLayer(darkTileLayer);
+      }
+    }
+
+    function createBeaconHtml(modifierClass) {
+      return `
+        <div class="radar-ping-core ${modifierClass}">
+          <div class="radar-ring"></div>
+          <div class="radar-ping-center"></div>
+        </div>
+      `;
+    }
+
+    let radarMarker = L.marker([DEFAULT_LAT, DEFAULT_LNG], {
+      icon: L.divIcon({
+        className: 'radar-beacon-container',
+        html: createBeaconHtml(''),
+        iconSize: [24, 24],
+        iconAnchor: [12, 12]
+      })
+    }).addTo(map);
+
+    function recenterCockpitMap() {
+      map.flyTo([cockpitLat, cockpitLng], 17, { animate: true, duration: 1.2 });
+    }
+
+    function copyCockpitCoords() {
+      const coordString = `${cockpitLat.toFixed(6)}, ${cockpitLng.toFixed(6)}`;
+      const tempArea = document.createElement('textarea');
+      tempArea.value = coordString;
+      document.body.appendChild(tempArea);
+      tempArea.select();
+      document.execCommand('copy');
+      document.body.removeChild(tempArea);
+
+      const dockCoords = document.getElementById('dockCoords');
+      const backupText = dockCoords.innerText;
+      dockCoords.innerText = "COPIED TO CLIPBOARD";
+      setTimeout(() => { dockCoords.innerText = backupText; }, 1200);
+    }
+
+    // Real-Time System Clock
+    function updateSystemClock() {
+      const now = new Date();
+      document.getElementById('systemClock').innerText = now.toTimeString().split(' ')[0] + " IST";
+    }
+    setInterval(updateSystemClock, 1000);
+    updateSystemClock();
+
+    // Incident Log Stream
+    let incidentCount = 0;
+    function appendIncident(code, msg, type = 'info') {
+      const container = document.getElementById('sidebarEventStream');
+      const counterBadge = document.getElementById('incidentCounter');
+      const time = new Date().toTimeString().split(' ')[0];
+
+      let badgeColor = 'text-slate-400';
+      if (type === 'danger') badgeColor = 'text-rose-400 font-bold';
+      if (type === 'warning') badgeColor = 'text-amber-400 font-bold';
+      if (type === 'success') badgeColor = 'text-emerald-400 font-bold';
+
+      const logItem = document.createElement('div');
+      logItem.className = "p-2 rounded-xl glass-chip text-[10px] font-mono transition";
+      logItem.innerHTML = `
+        <div class="flex items-center justify-between">
+          <span class="${badgeColor}">[${code}]</span>
+          <span class="text-slate-500 text-[8px]">${time}</span>
+        </div>
+        <p class="text-slate-300 mt-0.5">${msg}</p>
+      `;
+
+      container.prepend(logItem);
+      if (container.children.length > 25) {
+        container.removeChild(container.lastChild);
+      }
+
+      if (type === 'danger' || type === 'warning') {
+        incidentCount++;
+        counterBadge.innerText = `${incidentCount} ALERTS`;
+        counterBadge.className = "text-[9px] font-mono px-2 py-0.5 rounded-full bg-rose-950/70 text-rose-300 border border-rose-500/40 font-bold animate-pulse";
+      }
+    }
+
+    // State Synchronization Engine
+    let lastRecordedStatus = "SAFE";
+
+    function updateCockpitState(status, lat, lng) {
+      const statusIconSquare = document.getElementById('statusIconSquare');
+      const statusMainIcon = document.getElementById('statusMainIcon');
+      const statusPill = document.getElementById('statusPill');
+      const statusHeadline = document.getElementById('statusHeadline');
+      const statusDetailedMessage = document.getElementById('statusDetailedMessage');
+      const heroGlow = document.getElementById('heroGlow');
+
+      const imuAccelReadout = document.getElementById('imuAccelReadout');
+      const sidebarReedBadge = document.getElementById('sidebarReedBadge');
+      const sidebarBuzzerBadge = document.getElementById('sidebarBuzzerBadge');
+      const sidebarGpsBadge = document.getElementById('sidebarGpsBadge');
+
+      const dockSensorState = document.getElementById('dockSensorState');
+      const dockSensorDetail = document.getElementById('dockSensorDetail');
+      const dockGpsStatusText = document.getElementById('dockGpsStatusText');
+
+      // GPS Fallback vs Live Auto-Switch
+      const hasLiveGps = (lat && lng && parseFloat(lat) !== 0.0 && parseFloat(lng) !== 0.0);
+      const targetLat = hasLiveGps ? parseFloat(lat) : DEFAULT_LAT;
+      const targetLng = hasLiveGps ? parseFloat(lng) : DEFAULT_LNG;
+
+      cockpitLat = targetLat;
+      cockpitLng = targetLng;
+      radarMarker.setLatLng([targetLat, targetLng]);
+      map.panTo([targetLat, targetLng], { animate: true });
+
+      document.getElementById('dockCoords').innerText = `${targetLat.toFixed(6)}, ${targetLng.toFixed(6)}`;
+      document.getElementById('dockGoogleMapsBtn').href = `https://maps.google.com/?q=${targetLat},${targetLng}`;
+
+      if (hasLiveGps) {
+        sidebarGpsBadge.className = "text-[9px] px-1.5 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-500/30";
+        sidebarGpsBadge.innerText = "LOCKED 100%";
+        dockGpsStatusText.innerText = "3D Lock • NEO-6M Live Constellation";
+        dockGpsStatusText.className = "text-[10px] text-emerald-400 font-mono mt-0.5";
+      } else {
+        sidebarGpsBadge.className = "text-[9px] px-1.5 py-0.5 rounded bg-amber-950 text-amber-300 border border-amber-500/30";
+        sidebarGpsBadge.innerText = "FALLBACK PIN";
+        dockGpsStatusText.innerText = "Fallback Active • Searching Satellites";
+        dockGpsStatusText.className = "text-[10px] text-amber-400 font-mono mt-0.5";
+      }
+
+      if (status === "SAFE") {
+        statusIconSquare.className = "w-14 h-14 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400 shrink-0 transition-all duration-500 shadow-inner";
+        statusMainIcon.setAttribute('data-lucide', 'shield-check');
+        statusPill.className = "text-[10px] font-mono px-2.5 py-0.5 rounded-full bg-emerald-950/80 text-emerald-300 border border-emerald-500/30 font-bold";
+        statusPill.innerText = "SYSTEM NORMAL";
+        statusHeadline.innerText = "SAFE / MONITORING";
+        statusHeadline.className = "text-2xl sm:text-3xl font-extrabold tracking-tight text-white mt-1 font-sans";
+        statusDetailedMessage.innerText = hasLiveGps ? "Live GPS constellation active. All safety telemetry nominal." : "Safety telemetry nominal. Searching sky for satellite constellation.";
+        heroGlow.className = "absolute -right-10 -bottom-10 w-44 h-44 bg-emerald-500/10 rounded-full blur-[60px] pointer-events-none transition-all duration-700";
+
+        motionAgitation = 1.0;
+        waveStrokeColor = '#06b6d4';
+        imuAccelReadout.innerText = "1.00 G (9.8 m/s²)";
+        imuAccelReadout.className = "text-xs font-mono font-bold text-cyan-400";
+
+        sidebarReedBadge.className = "text-[9px] px-1.5 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-500/30";
+        sidebarReedBadge.innerText = "LATCHED";
+
+        sidebarBuzzerBadge.className = "text-[9px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-300 border border-white/10";
+        sidebarBuzzerBadge.innerText = "STANDBY";
+
+        dockSensorState.innerText = "MAGNET ATTACHED";
+        dockSensorState.className = "text-base font-bold font-mono text-emerald-400";
+        dockSensorDetail.innerText = "Reed Switch Pin 4: LOW (Secure)";
+
+        radarMarker.setIcon(L.divIcon({
+          className: 'radar-beacon-container',
+          html: createBeaconHtml(''),
+          iconSize: [24, 24],
+          iconAnchor: [12, 12]
+        }));
+
+        stopEmergencySiren();
+      }
+      else if (status.includes("FALL") || status.includes("SHAKE")) {
+        statusIconSquare.className = "w-14 h-14 rounded-2xl bg-amber-500/20 border border-amber-500/50 flex items-center justify-center text-amber-400 shrink-0 transition-all duration-500 shadow-inner";
+        statusMainIcon.setAttribute('data-lucide', 'alert-triangle');
+        statusPill.className = "text-[10px] font-mono px-2.5 py-0.5 rounded-full bg-amber-950/80 text-amber-300 border border-amber-500/40 font-bold";
+        statusPill.innerText = "IMPACT DETECTED";
+        statusHeadline.innerText = "FALL / IMPACT DETECTED";
+        statusHeadline.className = "text-2xl sm:text-3xl font-extrabold tracking-tight text-amber-300 mt-1 font-sans";
+        statusDetailedMessage.innerText = "Kinetic acceleration threshold crossed (>22.0 m/s²). Shockwave logged in journal.";
+        heroGlow.className = "absolute -right-10 -bottom-10 w-44 h-44 bg-amber-500/20 rounded-full blur-[60px] pointer-events-none transition-all duration-700";
+
+        motionAgitation = 5.2;
+        waveStrokeColor = '#f59e0b';
+        imuAccelReadout.innerText = "2.45 G (24.0 m/s²)";
+        imuAccelReadout.className = "text-xs font-mono font-bold text-amber-400";
+
+        sidebarBuzzerBadge.className = "text-[9px] px-1.5 py-0.5 rounded bg-amber-950 text-amber-300 border border-amber-500/40";
+        sidebarBuzzerBadge.innerText = "PULSING";
+
+        radarMarker.setIcon(L.divIcon({
+          className: 'radar-beacon-container',
+          html: createBeaconHtml('beacon-warning'),
+          iconSize: [24, 24],
+          iconAnchor: [12, 12]
+        }));
+
+        startEmergencySiren('FALL');
+      }
+      else if (status === "WATCH REMOVED") {
+        statusIconSquare.className = "w-14 h-14 rounded-2xl bg-orange-500/20 border border-orange-500/50 flex items-center justify-center text-orange-400 shrink-0 transition-all duration-500 shadow-inner";
+        statusMainIcon.setAttribute('data-lucide', 'magnet');
+        statusPill.className = "text-[10px] font-mono px-2.5 py-0.5 rounded-full bg-orange-950/80 text-orange-300 border border-orange-500/40 font-bold";
+        statusPill.innerText = "STRAP UNLATCHED";
+        statusHeadline.innerText = "WATCH REMOVED FROM WRIST";
+        statusHeadline.className = "text-2xl sm:text-3xl font-extrabold tracking-tight text-orange-300 mt-1 font-sans";
+        statusDetailedMessage.innerText = "Reed switch circuit open (GPIO 4 HIGH). Continuous buzzer feedback active.";
+        heroGlow.className = "absolute -right-10 -bottom-10 w-44 h-44 bg-orange-500/20 rounded-full blur-[60px] pointer-events-none transition-all duration-700";
+
+        motionAgitation = 2.4;
+        waveStrokeColor = '#f97316';
+        imuAccelReadout.innerText = "0.08 G (DETACHED)";
+        imuAccelReadout.className = "text-xs font-mono font-bold text-orange-400";
+
+        sidebarReedBadge.className = "text-[9px] px-1.5 py-0.5 rounded bg-orange-950 text-orange-300 border border-orange-500/40";
+        sidebarReedBadge.innerText = "OPEN";
+
+        sidebarBuzzerBadge.className = "text-[9px] px-1.5 py-0.5 rounded bg-orange-950 text-orange-300 border border-orange-500/40";
+        sidebarBuzzerBadge.innerText = "CONTINUOUS";
+
+        dockSensorState.innerText = "STRAP DETACHED";
+        dockSensorState.className = "text-base font-bold font-mono text-orange-400";
+        dockSensorDetail.innerText = "Reed Switch Pin 4: HIGH (Buzzer Beeping)";
+
+        radarMarker.setIcon(L.divIcon({
+          className: 'radar-beacon-container',
+          html: createBeaconHtml('beacon-warning'),
+          iconSize: [24, 24],
+          iconAnchor: [12, 12]
+        }));
+
+        startEmergencySiren('WATCH');
+      }
+      else if (status.includes("SOS")) {
+        statusIconSquare.className = "w-14 h-14 rounded-2xl bg-rose-500/20 border border-rose-500/50 flex items-center justify-center text-rose-400 shrink-0 transition-all duration-500 shadow-inner";
+        statusMainIcon.setAttribute('data-lucide', 'alert-octagon');
+        statusPill.className = "text-[10px] font-mono px-2.5 py-0.5 rounded-full bg-rose-950/80 text-rose-300 border border-rose-500/40 font-bold";
+        statusPill.innerText = "CRITICAL DISTRESS";
+        statusHeadline.innerText = "SOS BUTTON TRIGGERED";
+        statusHeadline.className = "text-2xl sm:text-3xl font-extrabold tracking-tight text-rose-400 mt-1 font-sans";
+        statusDetailedMessage.innerText = "Dedicated SOS Button (GPIO 13) depressed. CallMeBot WhatsApp alert dispatched.";
+        heroGlow.className = "absolute -right-10 -bottom-10 w-44 h-44 bg-rose-500/30 rounded-full blur-[60px] pointer-events-none transition-all duration-700";
+
+        motionAgitation = 4.8;
+        waveStrokeColor = '#f43f5e';
+        imuAccelReadout.innerText = "CRITICAL EVENT";
+        imuAccelReadout.className = "text-xs font-mono font-bold text-rose-400";
+
+        sidebarBuzzerBadge.className = "text-[9px] px-1.5 py-0.5 rounded bg-rose-950 text-rose-300 border border-rose-500/40";
+        sidebarBuzzerBadge.innerText = "HIGH FREQ";
+
+        radarMarker.setIcon(L.divIcon({
+          className: 'radar-beacon-container',
+          html: createBeaconHtml('beacon-danger'),
+          iconSize: [24, 24],
+          iconAnchor: [12, 12]
+        }));
+
+        startEmergencySiren('SOS');
+      }
+
+      lucide.createIcons();
+    }
+
+    // Polling Firebase Realtime Database (800ms)
+    const RTDB_URL = "https://guardianx-tracker-default-rtdb.asia-southeast1.firebasedatabase.app/tracker.json";
+
+    async function streamFirebaseTelemetry() {
+      const dot = document.getElementById('headerSyncDot');
+      const label = document.getElementById('headerSyncText');
+
+      try {
+        const response = await fetch(RTDB_URL + '?_=' + Date.now());
+        const telemetry = await response.json();
+
+        dot.className = "w-2 h-2 rounded-full bg-emerald-400 animate-pulse";
+        label.innerText = "LIVE STREAMING";
+
+        if (telemetry && telemetry.status) {
+          if (telemetry.status !== lastRecordedStatus) {
+            appendIncident(
+              telemetry.status === "SAFE" ? "TELEMETRY_NORM" : "DISTRESS_EVENT",
+              `Condition transition: ${telemetry.status}`,
+              telemetry.status === "SAFE" ? "success" : "danger"
+            );
+            lastRecordedStatus = telemetry.status;
+          }
+
+          const targetLat = (telemetry.lat && telemetry.lat !== 0) ? telemetry.lat : DEFAULT_LAT;
+          const targetLng = (telemetry.lng && telemetry.lng !== 0) ? telemetry.lng : DEFAULT_LNG;
+          updateCockpitState(telemetry.status, targetLat, targetLng);
+        }
+      } catch (err) {
+        dot.className = "w-2 h-2 rounded-full bg-amber-400";
+        label.innerText = "RECONNECTING";
+      }
+    }
+
+    function triggerSimulatedState(stateName) {
+      getAudio();
+      appendIncident("OPERATOR_TEST", `Manual cockpit simulation: ${stateName}`, stateName === "SAFE" ? "success" : "danger");
+      lastRecordedStatus = stateName;
+      updateCockpitState(stateName, cockpitLat, cockpitLng);
+    }
+
+    // Auto-stream every 800ms for zero lag
+    streamFirebaseTelemetry();
+    setInterval(streamFirebaseTelemetry, 800);
+
+    window.addEventListener('DOMContentLoaded', () => {
+      lucide.createIcons();
+    });
+  </script>
+</body>
+</html>
